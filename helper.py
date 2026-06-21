@@ -1,5 +1,39 @@
 import os 
 import pandas as pd
+import os
+import random
+import numpy as np
+import torch
+
+def set_seed(seed: int = 42):
+    """
+    Sets the random seed for Python, NumPy, PyTorch, and CUDA 
+    to ensure reproducible results across runs.
+    """
+    # 1. Standard Python random module
+    random.seed(seed)
+    
+    # 2. NumPy environment
+    np.random.seed(seed)
+    
+    # 3. PyTorch (CPU)
+    torch.manual_seed(seed)
+    
+    # 4. PyTorch (GPU / CUDA)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed(seed)
+        torch.cuda.manual_seed_all(seed)  # Safe for multi-GPU setups
+        
+    # 5. CUDNN deterministic backend (Crucial for reproducibility in Deep Learning)
+    # Note: This can slightly slow down training performance
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+    
+    # 6. Python hash seed environment variable
+    os.environ['PYTHONHASHSEED'] = str(seed)
+    
+    print(f"🔑 All random seeds set to: {seed}")
+
 
 def merge_data_from_different_sensors_in_same_building(path, columns_to_keep_from_each_sensor = ['Date and Time', 'TMP indoor', 'HUM indoor', 'CO2 indoor', 'VOCT indoor', 'DBAA indoor', 'DBAP indoor', 'LIGHT_LUX indoor', 'OCCUPANCY_RATE indoor'], frequency='15min'):
     '''
