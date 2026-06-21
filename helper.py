@@ -60,6 +60,58 @@ def merge_data_from_different_sensors_in_same_building(path, columns_to_keep_fro
         
     return pd.DataFrame()
 
-# Test run. You can change frequency to '5min', '10min', '1H', etc.
-merged_data = merge_data_from_different_sensors_in_same_building('Data/NORD', frequency='10min')
-print(merged_data.to_csv('Data/merged_nord.csv', index=False))
+def merge_sensor_and_power_data(sensor_df, power_df, frequency='10min'):
+    """
+    Merges the sensor dataframe and the power dataframe.
+    It aligns them by matching 'Date and Time' from the sensors so that it falls 
+    within the [Horodatage_Début, Horodatage_Fin) interval of the power data.
+    Keeps only the consumption values (Valeur) aggregated to completely match sensor frequency!
+    """
+    sensor_df = sensor_df.copy()
+    power_df = power_df.copy()
+
+    # 1. Normalize sensor datetime
+    sensor_df['Date and Time'] = pd.to_datetime(sensor_df['Date and Time'])
+    if sensor_df['Date and Time'].dt.tz is not None:
+        sensor_df['Date and Time'] = sensor_df['Date and Time'].dt.tz_localize(None)
+    
+    # 2. Normalize power datetimes completely ignoring their explicit string offsets (e.g., '+01:00')
+    # This prevents any timezone shifting and ensures it strictly matches the raw "clock time" of the sensors.
+    power_df['Horodatage_Début'] = pd.to_datetime(power_df['Horodatage_Début'].astype(str).str[:19])
+    power_df['Horodatage_Fin'] = pd.to_datetime(power_df['Horodatage_Fin'].astype(str).str[:19])
+
+    # 3. Filter power_df to keep only the consumption value!
+    if 'Nature_Mesure' in power_df.columns:
+        power_df = power_df[power_df['Nature_Mesure'] == 'CONSOMMATION']
+    
+    cols_to_keep = ['Horodatage_Début', 'Horodatage_Fin', 'Valeur', 'Consommation']
+    power_df = power_df[[c for c in cols_to_keep if c in power_df.columns]]
+    
+    # 3b. Aggregate energy consumption across exactly matching intervals sizes (e.g. '10min')
+    if frequency:
+        # Round the sensor datetimes to the chosen frequency to align as best as possible!
+        sensor_df['Date and Time'] = sensor_df['Date and Time'].dt.round(frequency)
+        # Sum the energy consumption over the new intervals to capture any 2x5min splits!
+        power_df = power_df.set_index('Horodatage_Début').resample(frequency).sum(numeric_only=True).reset_index()
+        # Mathematically create the exact Horodatage_Fin
+        power_df['Horodatage_Fin'] = power_df['Horodatage_Début'] + pd.Timedelta(frequency)
+    
+    # 4. Sort both dataframes for exactly matching them using merge_asof
+    sensor_df = sensor_df.sort_values('Date and Time')
+    power_df = power_df.sort_values('Horodatage_Début')
+    
+    # 5. Use nearest merge_asof to match exactly or closest interval
+    merged = pd.merge_asof(
+        sensor_df, 
+        power_df,
+        left_on='Date and Time',
+        right_on='Horodatage_Début',
+        direction='nearest',
+        tolerance=pd.Timedelta(frequency) / 2 if frequency else None
+    )
+    
+    # 6. Filter out rows where 'Date and Time' safely exceeded 'Horodatage_Fin'
+    if 'Horodatage_Fin' in merged.columns:
+        merged = merged[merged['Date and Time'] < merged['Horodatage_Fin']]
+
+    return merged
