@@ -10,26 +10,26 @@ def set_seed(seed: int = 42):
     Sets the random seed for Python, NumPy, PyTorch, and CUDA 
     to ensure reproducible results across runs.
     """
-    # 1. Standard Python random module
+    # Standard Python random module
     random.seed(seed)
     
-    # 2. NumPy environment
+    # NumPy environment
     np.random.seed(seed)
     
-    # 3. PyTorch (CPU)
+    # PyTorch (CPU)
     torch.manual_seed(seed)
     
-    # 4. PyTorch (GPU / CUDA)
+    # PyTorch (GPU / CUDA)
     if torch.cuda.is_available():
         torch.cuda.manual_seed(seed)
         torch.cuda.manual_seed_all(seed)  # Safe for multi-GPU setups
         
-    # 5. CUDNN deterministic backend (Crucial for reproducibility in Deep Learning)
+    # CUDNN deterministic backend (Crucial for reproducibility in Deep Learning)
     # Note: This can slightly slow down training performance
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
     
-    # 6. Python hash seed environment variable
+    # Python hash seed environment variable
     os.environ['PYTHONHASHSEED'] = str(seed)
     
     print(f"🔑 All random seeds set to: {seed}")
@@ -149,3 +149,53 @@ def merge_sensor_and_power_data(sensor_df, power_df, frequency='10min'):
         merged = merged[merged['Date and Time'] < merged['Horodatage_Fin']]
 
     return merged
+
+
+def extract_metric_datasets(merged_df, metrics_to_extract=None, power_cols=['Valeur', 'Consommation']):
+    """
+    Splits a merged dataframe into separate dataframes per metric, 
+    automatically including the power consumption data in each.
+    """
+    if metrics_to_extract is None:
+        metrics_to_extract = [
+            'TMP indoor', 
+            'HUM indoor', 
+            'CO2 indoor', 
+            'VOCT indoor', 
+            'DBAA indoor', 
+            'DBAP indoor', 
+            'LIGHT_LUX indoor', 
+            'OCCUPANCY_RATE indoor'
+        ]
+
+    metric_datasets = {}
+
+    for metric in metrics_to_extract:
+        # Find sensor columns matching this metric
+        matching_cols = [
+            col for col in merged_df.columns 
+            if col == metric or col.startswith(f"{metric} ")
+        ]
+        
+        if matching_cols:
+            cols_to_select = []
+            
+            # 1. Keep timestamp if present
+            if 'Date and Time' in merged_df.columns:
+                cols_to_select.append('Date and Time')
+                
+            
+            if 'Consommation' in merged_df.columns:
+                cols_to_select.append('Consommation')
+                    
+            # 3. Add room sensor columns
+            cols_to_select.extend(matching_cols)
+            
+            # Slice and clean column names
+            metric_df = merged_df[cols_to_select].copy()
+            rename_map = {col: col.replace(f"{metric} ", "") for col in matching_cols}
+            metric_df = metric_df.rename(columns=rename_map)
+            
+            metric_datasets[metric] = metric_df
+
+    return metric_datasets
