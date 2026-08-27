@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 
 class CNNModel(nn.Module):
-    def __init__(self, input_size, num_filters=64, kernel_size=3, output_size=1):
+    def __init__(self, input_size, num_filters=128, kernel_size=9, output_size=1):
         super(CNNModel, self).__init__()
         self.conv1 = nn.Conv1d(in_channels=input_size, out_channels=num_filters,
                                 kernel_size=kernel_size, padding=kernel_size // 2)
